@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multi-Agent System</title>
+
+    <style>
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background: #f4f6f8;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+        }
+
+        button {
+            padding: 10px 18px;
+            margin: 5px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-start { background: #007bff; color: white; }
+        .btn-approve { background: #28a745; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+
+        input {
+            padding: 8px;
+            width: 250px;
+        }
+
+        pre {
+            background: #f1f1f1;
+            padding: 10px;
+            overflow-x: auto;
+        }
+
+        /* Pipeline */
+
+        .pipeline {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .stage {
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: #ddd;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .completed {
+            background: #28a745;
+            color: white;
+        }
+
+        .active {
+            background: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+
+        .error {
+            background: #dc3545;
+            color: white;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .status-badge {
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+
+        .status-running { background: #ffc107; }
+        .status-waiting { background: #17a2b8; color: white; }
+        .status-completed { background: #28a745; color: white; }
+        .status-error { background: #dc3545; color: white; }
+
+    </style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🤖 Multi-Agent Software Pipeline</h1>
+
+<div class="card">
+
+    <h3>Brief Input</h3>
+
+    <textarea id="brief" placeholder="Paste brief here..."></textarea>
+
+    <br>
+
+    <button class="btn-start" onclick="startRun()">Start Run</button>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Human-in-the-Loop Controls</h3>
+
+    <button class="btn-approve" onclick="approve()">Approve</button>
+
+    <input id="feedback" placeholder="Feedback (optional)" />
+
+    <button class="btn-reject" onclick="reject()">Reject</button>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Pipeline</h3>
+
+    <div id="pipeline" class="pipeline">
+
+        <div class="stage" id="requirements">⚙️ Requirements</div>
+        <div class="stage" id="inception">📘 Inception</div>
+        <div class="stage" id="stories">🧾 Stories</div>
+        <div class="stage" id="qa">🧪 QA</div>
+        <div class="stage" id="design">🎨 Design</div>
+        <div class="stage" id="done">✅ Done</div>
+
+    </div>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Status</h3>
+    <div id="status"></div>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Artifacts</h3>
+    <pre id="artifacts"></pre>
+
+</div>
+
+
+<div class="card">
+
+    <h3>Logs</h3>
+    <pre id="logs"></pre>
+
+</div>
+
+</div>
+
+
+<script>
+
+const API = "http://127.0.0.1:8000";
+
+let runId = null;
+
+
+// ================= START =================
+
+async function startRun() {
+
+    const brief = document.getElementById("brief").value;
+
+    const res = await fetch(`${API}/runs/start`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ brief })
+    });
+
+    const data = await res.json();
+
+    runId = data.run_id;
+
+    startAutoRefresh();
+}
+
+
+// ================= APPROVE =================
+
+async function approve() {
+
+    if (!runId) return alert("Start a run first");
+
+    await fetch(`${API}/runs/${runId}/approve`, {
+        method: "POST"
+    });
+}
+
+
+// ================= REJECT =================
+
+async function reject() {
+
+    if (!runId) return alert("Start a run first");
+
+    const feedback = document.getElementById("feedback").value;
+
+    await fetch(`${API}/runs/${runId}/reject?feedback=${encodeURIComponent(feedback)}`, {
+        method: "POST"
+    });
+
+    alert("Stage rejected");
+}
+
+
+// ================= PIPELINE =================
+
+function updatePipeline(stage, status) {
+
+    const stages = ["requirements", "inception", "stories", "qa", "design", "done"];
+
+    stages.forEach(s => {
+        const el = document.getElementById(s);
+        el.classList.remove("active", "completed", "error");
+    });
+
+    let reached = true;
+
+    stages.forEach(s => {
+
+        const el = document.getElementById(s);
+
+        if (reached) {
+            el.classList.add("completed");
+        }
+
+        if (s === stage) {
+            el.classList.remove("completed");
+            el.classList.add("active");
+            reached = false;
+        }
+    });
+
+    if (status === "ERROR") {
+        document.getElementById(stage).classList.add("error");
+    }
+}
+
+
+// ================= STATUS =================
+
+async function updateStatus() {
+
+    if (!runId) return;
+
+    const res = await fetch(`${API}/runs/${runId}/status`);
+    const data = await res.json();
+
+    updatePipeline(data.stage, data.status);
+
+    document.getElementById("status").innerHTML =
+        `<span class="status-badge status-${data.status.toLowerCase()}">
+            ${data.status}
+        </span>
+        <br><br>
+        Stage: <b>${data.stage}</b>`;
+
+    updateArtifacts();
+    updateLogs();
+}
+
+
+// ================= ARTIFACTS =================
+
+async function updateArtifacts() {
+
+    const res = await fetch(`${API}/runs/${runId}/artifacts`);
+    const data = await res.json();
+
+    document.getElementById("artifacts").innerText =
+        JSON.stringify(data.files, null, 2);
+}
+
+
+// ================= LOGS =================
+
+async function updateLogs() {
+
+    const res = await fetch(`${API}/runs/${runId}/logs`);
+    const data = await res.json();
+
+    document.getElementById("logs").innerText =
+        JSON.stringify(data.logs, null, 2);
+}
+
+
+// ================= AUTO REFRESH =================
+
+let interval = null;
+
+function startAutoRefresh() {
+
+    if (interval) clearInterval(interval);
+
+    updateStatus();
+
+    interval = setInterval(updateStatus, 3000);
+}
+
+</script>
+
+</body>
+</html>
