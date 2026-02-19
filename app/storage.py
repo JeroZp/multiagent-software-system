@@ -18,4 +18,4 @@ def save_text(run_id: str, filename: str, content: str):
 def save_json(run_id: str, filename: str, data: dict):
     path = os.path.join(BASE_DIR, run_id, filename)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(data, f, indent=2, ensure_ascii=False)

@@ -47,4 +47,8 @@ Inception:
     if content.startswith("```"):
         content = content.replace("```json", "").replace("```", "").strip()
 
+    # fallback si no es JSON
+    if not content.startswith("{"):
+        raise ValueError(f"Invalid JSON from model: {content[:200]}")
+
     return json.loads(content)

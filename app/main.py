@@ -144,14 +144,14 @@ def approve_stage(run_id: str):
         # ===== REQUIREMENTS → INCEPTION =====
         if run.current_stage == "requirements":
 
-            with open(f"runs/{run_id}/brief.txt") as f:
+            with open(f"runs/{run_id}/brief.txt", encoding="utf-8") as f:
                 brief = f.read()
 
             feedback_path = f"runs/{run_id}/feedback.txt"
 
             feedback = None
             if os.path.exists(feedback_path):
-                with open(feedback_path) as f:
+                with open(feedback_path, encoding="utf-8") as f:
                     feedback = f.read()
 
             requirements = requirements_agent(brief, feedback)
@@ -163,7 +163,7 @@ def approve_stage(run_id: str):
             run.current_stage = "requirements"
             run.status = "WAITING_APPROVAL"
 
-            with open(f"runs/{run_id}/requirements.json") as f:
+            with open(f"runs/{run_id}/requirements.json", encoding="utf-8") as f:
                 requirements = json.load(f)
 
             inception = inception_agent(requirements)
@@ -178,10 +178,10 @@ def approve_stage(run_id: str):
         # ===== INCEPTION → STORIES =====
         elif run.current_stage == "inception":
 
-            with open(f"runs/{run_id}/requirements.json") as f:
+            with open(f"runs/{run_id}/requirements.json", encoding="utf-8") as f:
                 requirements = json.load(f)
 
-            with open(f"runs/{run_id}/inception.json") as f:
+            with open(f"runs/{run_id}/inception.json", encoding="utf-8") as f:
                 inception = json.load(f)
 
             stories = stories_agent(requirements, inception)
@@ -196,7 +196,7 @@ def approve_stage(run_id: str):
         # ===== STORIES → QA =====
         elif run.current_stage == "stories":
 
-            with open(f"runs/{run_id}/stories.json") as f:
+            with open(f"runs/{run_id}/stories.json", encoding="utf-8") as f:
                 stories = json.load(f)
 
             testcases = qa_agent(stories)
@@ -211,7 +211,18 @@ def approve_stage(run_id: str):
         # ===== QA → DESIGN =====
         elif run.current_stage == "qa":
 
-            diagrams = design_agent()
+            from .diagram import generate_svg
+
+            with open(f"runs/{run_id}/requirements.json", encoding="utf-8") as f:
+                requirements = json.load(f)
+
+            with open(f"runs/{run_id}/stories.json", encoding="utf-8") as f:
+                stories = json.load(f)
+
+            with open(f"runs/{run_id}/testcases.json", encoding="utf-8") as f:
+                testcases = json.load(f)
+
+            diagrams = design_agent(requirements, stories, testcases)
 
             er_mmd = f"runs/{run_id}/er.mmd"
             seq_mmd = f"runs/{run_id}/sequence.mmd"
@@ -225,22 +236,15 @@ def approve_stage(run_id: str):
             print("Generating SVG...")
 
             try:
-                from .diagram import generate_svg
-                import shutil
-
-                if shutil.which("mmdc"):
-                    generate_svg(er_mmd, er_svg)
-                    generate_svg(seq_mmd, seq_svg)
-                else:
-                    print("mmdc not installed — skipping SVG")
-
+                generate_svg(er_mmd, er_svg)
+                generate_svg(seq_mmd, seq_svg)
             except Exception as e:
                 print("SVG error:", e)
 
             print("SVG finished")
 
             log_event(run_id, "DesignAgent", "design",
-                    "Diagrams generated")
+                    "Dynamic diagrams generated")
 
             run.current_stage = "design"
             run.status = "WAITING_APPROVAL"
@@ -264,6 +268,15 @@ def approve_stage(run_id: str):
 
     except Exception as e:
         db.rollback()
+
+        log_event(run_id, "System", run.current_stage,
+          f"Error: {str(e)}")
+
+        run.status = "ERROR"
+        db.commit()
+
+        print("Error during approval:", e)
+
         return {"error": str(e)}
 
     finally:
